@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+.git
+.github
+README.md
+docker-compose.yml
+ofelia.ini
+*.md

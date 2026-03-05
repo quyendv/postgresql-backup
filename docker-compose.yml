@@ -1,0 +1,31 @@
+services:
+  # ── Ofelia: lightweight cron scheduler ──────────────────────────────────────
+  ofelia:
+    image: mcuadros/ofelia:latest
+    container_name: ofelia
+    restart: unless-stopped
+    depends_on:
+      - postgres-backup
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./ofelia.ini:/etc/ofelia/config.ini:ro
+
+  # ── Postgres Backup (triggered by ofelia, not run directly) ─────────────────
+  postgres-backup:
+    image: ghcr.io/quyendv/postgresql-backup:latest
+    container_name: postgres-backup
+    build:
+      context: .
+      args:
+        PG_VERSION: "16"
+    env_file:
+      - .env
+    volumes:
+      - backup_data:/backup
+    profiles:
+      - manual # only runs via: docker compose run --rm postgres-backup
+    restart: "no"
+
+volumes:
+  backup_data:
+    driver: local
