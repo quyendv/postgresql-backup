@@ -1,16 +1,4 @@
 services:
-  # ── Ofelia: lightweight cron scheduler ──────────────────────────────────────
-  ofelia:
-    image: mcuadros/ofelia:latest
-    container_name: ofelia
-    restart: unless-stopped
-    depends_on:
-      - postgres-backup
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./ofelia.ini:/etc/ofelia/config.ini:ro
-
-  # ── Postgres Backup (triggered by ofelia, not run directly) ─────────────────
   postgres-backup:
     image: ghcr.io/quyendv/postgresql-backup:latest
     container_name: postgres-backup
@@ -20,11 +8,16 @@ services:
         PG_VERSION: "16"
     env_file:
       - .env
+    # SCHEDULE uses standard cron syntax. Examples:
+    #   "0 */4 * * *"  — every 4 hours
+    #   "0 2 * * *"    — daily at 02:00
+    #   "@every 6h"    — every 6 hours (supercronic extension)
+    # Leave empty (or omit) to run once and exit.
+    environment:
+      SCHEDULE: "0 */4 * * *"
     volumes:
       - backup_data:/backup
-    profiles:
-      - manual # only runs via: docker compose run --rm postgres-backup
-    restart: "no"
+    restart: unless-stopped
 
 volumes:
   backup_data:

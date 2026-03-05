@@ -20,7 +20,24 @@ RUN ARCH=$(uname -m) && \
     ./aws/install --install-dir /aws-cli-bin --bin-dir /aws-cli-bin/bin && \
     rm -rf awscliv2.zip aws/
 
-# ── Stage 2: Final image ──────────────────────────────────────────────────────
+# ── Stage 2: Download supercronic ────────────────────────────────────────────
+FROM debian:bookworm-slim AS supercronic-installer
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then \
+        SC_URL="https://github.com/aptible/supercronic/releases/latest/download/supercronic-linux-arm64"; \
+    else \
+        SC_URL="https://github.com/aptible/supercronic/releases/latest/download/supercronic-linux-amd64"; \
+    fi && \
+    curl -fsSL "$SC_URL" -o /usr/local/bin/supercronic && \
+    chmod +x /usr/local/bin/supercronic
+
+# ── Stage 3: Final image ──────────────────────────────────────────────────────
 FROM debian:bookworm-slim
 
 ARG PG_VERSION=16
@@ -49,8 +66,12 @@ RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
 COPY --from=aws-installer /aws-cli-bin /aws-cli-bin
 ENV PATH="/aws-cli-bin/bin:$PATH"
 
+COPY --from=supercronic-installer /usr/local/bin/supercronic /usr/local/bin/supercronic
+
 COPY scripts/backup.sh /usr/local/bin/backup.sh
-RUN chmod +x /usr/local/bin/backup.sh
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r//' /usr/local/bin/backup.sh /usr/local/bin/entrypoint.sh \
+    && chmod +x /usr/local/bin/backup.sh /usr/local/bin/entrypoint.sh
 
 ENV POSTGRES_HOST=""
 ENV POSTGRES_PORT="5432"
@@ -65,8 +86,9 @@ ENV S3_REGION="us-east-1"
 ENV S3_PATH="backups"
 ENV TTL_DAYS="7"
 ENV BACKUP_DIR="/backup"
+ENV SCHEDULE=""
 
 RUN mkdir -p /backup
 VOLUME ["/backup"]
 
-ENTRYPOINT ["/usr/local/bin/backup.sh"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
