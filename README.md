@@ -6,7 +6,7 @@ Docker image to backup PostgreSQL databases to S3-compatible storage (MinIO, AWS
 
 - `pg_dump` with custom format + gzip compression
 - Upload to any S3-compatible storage via AWS CLI v2
-- Automatic cleanup of old backups (local + remote) based on TTL
+- Automatic cleanup of old backups (local + remote) based on TTL, with optional minimum count of newest backups always kept
 - Built-in cron scheduler via `supercronic` — no extra container needed
 - Set `SCHEDULE` env to run periodically; omit to run once and exit
 - Supports PostgreSQL 14 / 15 / 16 / 17
@@ -124,6 +124,7 @@ docker compose run --rm postgres-backup
 | `S3_REGION`         | ✅       | `us-east-1` | Region                                                              |
 | `S3_PATH`           | ✅       | `backups`   | Path prefix inside bucket                                           |
 | `TTL_DAYS`          | ❌       | `7`         | Number of days to retain backups                                    |
+| `MIN_BACKUPS`       | ❌       | `0`         | Always keep this many **newest** backups (local + S3), even past TTL |
 | `BACKUP_DIR`        | ❌       | `/backup`   | Local backup directory inside container                             |
 | `SCHEDULE`          | ❌       | _(empty)_   | Cron expression to run periodically. If empty, runs once and exits. |
 

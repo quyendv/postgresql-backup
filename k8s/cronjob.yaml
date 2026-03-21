@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  namespace: bi-db
+  namespace: <your-namespace>
   name: postgresql-backup-secret
 type: Opaque
 stringData:
-  POSTGRES_HOST: ""
+  POSTGRES_HOST: "postgresql.<your-namespace>.svc.cluster.local"
   POSTGRES_PORT: "5432"
   POSTGRES_USER: ""
   POSTGRES_PASSWORD: ""
@@ -17,14 +17,15 @@ stringData:
   S3_REGION: "us-east-1"
   S3_PATH: "backups/postgres"
   TTL_DAYS: "7"
+  MIN_BACKUPS: "0"
 ---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  namespace: bi-db
+  namespace: <your-namespace>
   name: postgresql-backup
 spec:
-  schedule: "0 */4 * * *"
+  schedule: '0 */4 * * *'
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
   concurrencyPolicy: Forbid
@@ -34,7 +35,8 @@ spec:
         spec:
           containers:
             - name: postgresql-backup
-              image: ghcr.io/quyendv/postgresql-backup:pg16
+              image: ghcr.io/quyendv/postgresql-backup:pg<VERSION> # pg17
+              imagePullPolicy: Always
               envFrom:
                 - secretRef:
                     name: postgresql-backup-secret
