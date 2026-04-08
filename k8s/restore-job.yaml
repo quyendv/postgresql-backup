@@ -1,0 +1,54 @@
+# One-off restore Job: same image as CronJob, MODE=restore.
+# Apply after editing namespace, image tag (match cluster PG major), and Secret values.
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: <your-namespace>
+  name: postgresql-restore-secret
+type: Opaque
+stringData:
+  POSTGRES_HOST: "postgresql.<your-namespace>.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: ""
+  POSTGRES_PASSWORD: ""
+  POSTGRES_DB: ""
+  POSTGRES_MAINTENANCE_DB: "postgres"
+  S3_ACCESS_KEY: ""
+  S3_SECRET_KEY: ""
+  S3_ENDPOINT: ""
+  S3_BUCKET: ""
+  S3_REGION: "us-east-1"
+  S3_PATH: "backups/postgres"
+  # Optional: pin folder YYYYMMDD_HHMMSS; omit to use latest under S3_PATH
+  # RESTORE_TIMESTAMP: "20260305_020000"
+  # RESTORE_DROP_DB: "true"
+  # RESTORE_CLEAN: "true"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  namespace: <your-namespace>
+  name: postgresql-restore
+spec:
+  ttlSecondsAfterFinished: 86400
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: postgresql-restore
+          image: ghcr.io/quyendv/postgresql-backup:pg<VERSION>
+          imagePullPolicy: Always
+          env:
+            - name: MODE
+              value: "restore"
+          envFrom:
+            - secretRef:
+                name: postgresql-restore-secret
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "200m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"

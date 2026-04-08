@@ -69,9 +69,10 @@ ENV PATH="/aws-cli-bin/bin:$PATH"
 COPY --from=supercronic-installer /usr/local/bin/supercronic /usr/local/bin/supercronic
 
 COPY scripts/backup.sh /usr/local/bin/backup.sh
+COPY scripts/restore.sh /usr/local/bin/restore.sh
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN sed -i 's/\r//' /usr/local/bin/backup.sh /usr/local/bin/entrypoint.sh \
-    && chmod +x /usr/local/bin/backup.sh /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r//' /usr/local/bin/backup.sh /usr/local/bin/restore.sh /usr/local/bin/entrypoint.sh \
+    && chmod +x /usr/local/bin/backup.sh /usr/local/bin/restore.sh /usr/local/bin/entrypoint.sh
 
 ENV POSTGRES_HOST=""
 ENV POSTGRES_PORT="5432"

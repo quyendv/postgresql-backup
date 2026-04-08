@@ -9,6 +9,7 @@ Docker image to backup PostgreSQL databases to S3-compatible storage (MinIO, AWS
 - Automatic cleanup of old backups (local + remote) based on TTL, with optional minimum count of newest backups always kept
 - Built-in cron scheduler via `supercronic` — no extra container needed
 - Set `SCHEDULE` env to run periodically; omit to run once and exit
+- One-shot **restore** from S3 with `MODE=restore` (same image as backup)
 - Supports PostgreSQL 14 / 15 / 16 / 17
 - Multi-arch: `linux/amd64` + `linux/arm64`
 - Install once, run forever — no need to install anything on the host server
@@ -35,6 +36,32 @@ docker run --rm \
   -e TTL_DAYS=7 \
   ghcr.io/quyendv/postgresql-backup:latest
 ```
+
+### Restore once (from S3)
+
+Use the **same** image tag as your PostgreSQL major version (e.g. `pg17` for PostgreSQL 17). The dump on S3 must be `postgresql_backup.dump.gz` under `S3_PATH/<timestamp>/` (same layout as backup).
+
+```bash
+docker run --rm \
+  -e MODE=restore \
+  -e POSTGRES_HOST=192.168.1.100 \
+  -e POSTGRES_PORT=5432 \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=secret \
+  -e POSTGRES_DB=mydb \
+  -e RESTORE_DROP_DB=true \
+  -e S3_ACCESS_KEY=xxx \
+  -e S3_SECRET_KEY=xxx \
+  -e S3_ENDPOINT=https://minio.example.com \
+  -e S3_BUCKET=my-bucket \
+  -e S3_REGION=us-east-1 \
+  -e S3_PATH=backups/postgres \
+  ghcr.io/quyendv/postgresql-backup:pg16
+```
+
+- Without `RESTORE_DROP_DB=true`, the target database must already exist.
+- Set `RESTORE_TIMESTAMP=YYYYMMDD_HHMMSS` to pick a specific backup folder; otherwise the **latest** folder matching `YYYYMMDD_*` under `S3_PATH/` is used.
+- Set `RESTORE_CLEAN=true` to add `pg_restore --clean --if-exists` (drops objects in the target DB before restore).
 
 ### Run on a schedule (cron mode)
 
@@ -127,6 +154,17 @@ docker compose run --rm postgres-backup
 | `MIN_BACKUPS`       | ❌       | `0`         | Always keep this many **newest** backups (local + S3), even past TTL |
 | `BACKUP_DIR`        | ❌       | `/backup`   | Local backup directory inside container                             |
 | `SCHEDULE`          | ❌       | _(empty)_   | Cron expression to run periodically. If empty, runs once and exits. |
+| `MODE`              | ❌       | `backup`    | Set to `restore` to run restore instead of backup (ignores `SCHEDULE`). |
+
+#### Restore-only variables
+
+| Variable                   | Required | Default   | Description |
+| -------------------------- | -------- | --------- | ----------- |
+| `RESTORE_TIMESTAMP`      | ❌       | _(latest)_ | Backup folder name under `S3_PATH` (e.g. `20260305_020000`). Omit to use newest `YYYYMMDD_*` prefix. |
+| `RESTORE_DROP_DB`        | ❌       | `false`   | If `true`, terminate connections, `DROP DATABASE`, then `CREATE DATABASE` for `POSTGRES_DB` (uses `POSTGRES_MAINTENANCE_DB`). |
+| `POSTGRES_MAINTENANCE_DB` | ❌       | `postgres` | Database to connect to for drop/create when `RESTORE_DROP_DB=true`. |
+| `RESTORE_CLEAN`          | ❌       | `false`   | If `true`, pass `--clean --if-exists` to `pg_restore`. |
+| `RESTORE_WORK_DIR`       | ❌       | `/tmp/postgresql-restore` | Temp directory for the downloaded `.dump.gz`. |
 
 ### SCHEDULE examples
 
@@ -167,7 +205,10 @@ docker build --build-arg PG_VERSION=14 -t postgresql-backup:pg14 .
 
 ## Kubernetes
 
-See [`k8s/cronjob.yaml`](k8s/cronjob.yaml) — drop-in replacement for the old CronJob. No more AWS CLI installation on every run.
+- [`k8s/cronjob.yaml`](k8s/cronjob.yaml) — scheduled backup (same image; no AWS CLI install per run).
+- [`k8s/restore-job.yaml`](k8s/restore-job.yaml) — example **Job** with `MODE=restore` and a Secret aligned with backup env names.
+
+See also [`scripts/demo-restore.yaml`](scripts/demo-restore.yaml) for a minimal Pod + Service + restore Job demo.
 
 ---
 
@@ -184,13 +225,15 @@ s3://BUCKET/S3_PATH/
 
 ---
 
-## Restore
+## Restore (manual / outside the image)
+
+If you prefer not to use `MODE=restore`:
 
 ```bash
-# Download from S3
 aws s3 cp s3://BUCKET/S3_PATH/20260305_020000/postgresql_backup.dump.gz ./backup.dump.gz \
     --endpoint-url https://your-endpoint.com
 
-# Decompress and restore
-gunzip -c backup.dump.gz | pg_restore -h HOST -p 5432 -U USER -d TARGET_DB --no-owner
+gunzip -c backup.dump.gz | pg_restore -h HOST -p 5432 -U USER -d TARGET_DB --no-owner --no-privileges
 ```
+
+The image’s restore mode downloads this same object and runs `pg_restore` with a compatible client version.
